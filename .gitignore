@@ -1,3 +1,6 @@
 # virtual environment
 env
 venv
+
+# bytecode
+./ToImageBW/__pycache__/
