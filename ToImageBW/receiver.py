@@ -2,17 +2,19 @@ import numpy as np
 import sounddevice as sd
 import matplotlib.pyplot as plt
 from settings import Settings
+settings = Settings()
 
-def detect_frequency(signal):
+def get_frequency_strength(signal, target_freq):
     fft = np.fft.fft(signal)
-    freqs = np.fft.fftfreq(len(signal), 1/Settings.SAMPLE_RATE)
+    freqs = np.fft.fftfreq(len(signal), 1/settings.ESTANDAR)
 
-    idx = np.argmax(np.abs(fft))
-    return abs(freqs[idx])
+    idx = np.argmin(np.abs(freqs - target_freq))
+
+    return np.abs(fft[idx])
 
 def is_tone(signal, target):
-    freq = detect_frequency(signal)
-    return abs(freq - target) < Settings.TOLERANCIA
+    freq = get_frequency_strength(signal, target)
+    return abs(freq - target) < settings.TOLERANCIA
 
 def record_until_end():
     print("Esperando inicio...")
@@ -22,23 +24,23 @@ def record_until_end():
     def callback(indata, frames, time, status):
         audio.extend(indata[:, 0])
 
-    with sd.InputStream(callback=callback, samplerate=Settings.SAMPLE_RATE):
+    with sd.InputStream(callback=callback, samplerate=settings.ESTANDAR):
         started = False
         while True:
-            if len(audio) > Settings.SAMPLE_RATE * 0.5:
-                chunk = np.array(audio[-int(Settings.SAMPLE_RATE*0.5):])
+            if len(audio) > settings.ESTANDAR * 0.5:
+                chunk = np.array(audio[-int(settings.ESTANDAR*0.5):])
 
-                if not started and is_tone(chunk, Settings.FREQ_START):
+                if not started and is_tone(chunk, settings.FREQ_START):
                     print("Inicio detectado")
                     audio.clear()
                     started = True
 
-                elif started and is_tone(chunk, Settings.FREQ_END):
+                elif started and is_tone(chunk, settings.FREQ_END):
                     print("Fin detectado")
                     return np.array(audio)
 
 def decode_audio(audio):
-    samples_per_bit = int(Settings.SAMPLE_RATE * Settings.DURACION_BIT)
+    samples_per_bit = int(settings.ESTANDAR * settings.DURACION_BIT)
     bits = []
 
     total_bits = len(audio) // samples_per_bit
@@ -51,17 +53,18 @@ def decode_audio(audio):
 
         chunk = audio[start:end]
 
-        freq = detect_frequency(chunk)
-        print(f"Bloque {i}: {int(freq)} Hz")
+        strength_1 = get_frequency_strength(chunk, settings.FREQ_1)
+        strength_0 = get_frequency_strength(chunk, settings.FREQ_0)
 
-        if abs(freq - Settings.FREQ_1) < Settings.TOLERANCIA:
+        print(f"Bloque {i}: F1={strength_1:.2f}, F0={strength_0:.2f}")
+
+        if strength_1 > strength_0 * 1.2:
             bits.append(1)
-
-        elif abs(freq - Settings.FREQ_0) < Settings.TOLERANCIA:
+        elif strength_0 > strength_1 * 1.2:
             bits.append(0)
-
         else:
-            print("Ruido, ignorado")
+            print("Ruido")
+            bits.append(1)
 
     return bits
 
@@ -82,8 +85,3 @@ audio = record_until_end()
 bits = decode_audio(audio)
 
 print("Bits:", bits)
-
-WIDTH = 6
-HEIGHT = 5
-
-bits_to_image(bits, WIDTH, HEIGHT)

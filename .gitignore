@@ -3,4 +3,4 @@ env
 venv
 
 # bytecode
-./ToImageBW/__pycache__/
+ToImageBW/__pycache__
